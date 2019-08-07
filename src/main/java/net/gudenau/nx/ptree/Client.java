@@ -18,6 +18,9 @@ import java.util.List;
 
 import static net.gudenau.nx.ptree.util.Memory.NULL;
 
+/**
+ * A Switch client, the primary chunk of code.
+ * */
 class Client implements Runnable, AutoCloseable{
     private static final int COMMAND_BUFFER_SIZE = 0x1000;
     private static final int COMMAND_MAX_ID = Command.values().length - 1;

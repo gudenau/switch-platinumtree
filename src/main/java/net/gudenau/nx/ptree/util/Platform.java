@@ -8,7 +8,13 @@ import java.net.URISyntaxException;
 import java.nio.channels.Channels;
 import java.nio.file.Files;
 
+/**
+ * Platform specific stuff.
+ * */
 public class Platform{
+    /**
+     * Load natives.
+     * */
     public static void init(){
         var os = getOS();
         var arch = getArch();
@@ -52,6 +58,11 @@ public class Platform{
     }
 
     private static OS os = null;
+    /**
+     * Gets the current OS type.
+     *
+     * @return The current OS
+     * */
     public static OS getOS(){
         if(os == null){
             String name = System.getProperty("os.name").toLowerCase();
@@ -66,6 +77,11 @@ public class Platform{
     }
 
     private static Arch arch = null;
+    /**
+     * Gets the current OS architecture.
+     *
+     * @return The current OS architecture
+     * */
     public static Arch getArch(){
         if(arch == null){
             String name = System.getProperty("os.arch").toLowerCase();

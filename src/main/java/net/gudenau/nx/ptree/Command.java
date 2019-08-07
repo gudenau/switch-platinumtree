@@ -1,5 +1,8 @@
 package net.gudenau.nx.ptree;
 
+/**
+ * All known commands.
+ * */
 public enum Command{
     GetDriveCount,
     GetDriveInfo,
@@ -16,5 +19,5 @@ public enum Command{
     GetSpecialPathCount,
     GetSpecialPath,
     SelectFile,
-    Max
+    Max // What is this even for?
 }

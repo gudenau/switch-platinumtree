@@ -4,6 +4,9 @@ import net.gudenau.nx.ptree.util.Memory;
 
 import java.lang.ref.Cleaner;
 
+/**
+ * A handle for a hotplug handler, cleaned up when GC'ed.
+ * */
 public class UsbHotplugHandler implements AutoCloseable{
     private final Cleaner.Cleanable cleaner;
 

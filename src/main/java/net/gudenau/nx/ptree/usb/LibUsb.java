@@ -2,6 +2,9 @@ package net.gudenau.nx.ptree.usb;
 
 import java.lang.reflect.Method;
 
+/**
+ * The place where all the libusb calls go to be proxied to the actual library.
+ * */
 class LibUsb{
     public static final int LIBUSB_CAP_HAS_HOTPLUG = 0x0001;
 

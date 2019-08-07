@@ -12,12 +12,26 @@ import java.util.Set;
 import static net.gudenau.nx.ptree.usb.LibUsb.*;
 import static net.gudenau.nx.ptree.util.Memory.NULL;
 
+/**
+ * A more Java like wrapper for libusb, still fairly low level however.
+ * */
 public class Usb{
     public static final int HOTPLUG_ARRIVED = LibUsb.LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED;
 
+    /**
+     * Make sure this is cleaned up.
+     * */
     private final Cleaner.Cleanable cleaner;
+
+    /**
+     * The context for libusb
+     * */
     private final long context;
 
+    /**
+     * Create a new instance of Usb, creates a manages a corresponding
+     * libusb context.
+     * */
     public Usb(){
         try(var pointer = Memory.allocatePointer()){
             if(libusb_init(pointer.getAddress()) != LIBUSB_SUCCESS){
@@ -29,6 +43,14 @@ public class Usb{
         cleaner = Memory.registerCleaner(this, new State(context));
     }
 
+    /**
+     * Finds a device with the provided vid and pid.
+     *
+     * @param vid The device VID
+     * @param pid The device PID
+     *
+     * @return NULL or the device pointer
+     * */
     public long findDevice(short vid, short pid){
         var devices = findDevices(vid, pid);
         if(devices.isEmpty()){
@@ -38,6 +60,14 @@ public class Usb{
         }
     }
 
+    /**
+     * Finds devices with the provided vid and pid.
+     *
+     * @param vid The device VID
+     * @param pid The device PID
+     *
+     * @return A set of found devices
+     * */
     public Set<Long> findDevices(short vid, short pid){
         try(var pointer = Memory.allocatePointer()){
             long listResult = libusb_get_device_list(context, pointer.getAddress());
@@ -46,13 +76,15 @@ public class Usb{
                 return Set.of();
             }
 
+            // Try to make everything we can inside the try/final block to reduce leaks
             int count = (int)listResult;
-            var list = pointer.dereference(count * Memory.ADDRESS_SIZE);
             var descriptor = Memory.allocateBuffer(LibUsb.libusb_device_descriptor_SIZEOF());
-            long descriptorPointer = Memory.getBufferAddress(descriptor);
-            Set<Long> devices = new HashSet<>();
+            var list = pointer.dereference(count * Memory.ADDRESS_SIZE);
 
             try{
+                long descriptorPointer = Memory.getBufferAddress(descriptor);
+                Set<Long> devices = new HashSet<>();
+
                 for(int i = 0; i < count; i++){
                     long device = Memory.getPointer(list);
 
@@ -76,6 +108,13 @@ public class Usb{
         }
     }
 
+    /**
+     * Attempts to open a USB device.
+     *
+     * @param device The device pointer
+     *
+     * @return The device handle or NULL on error
+     * */
     public long open(long device){
         try(var pointer = Memory.allocatePointer()){
             if(libusb_open(device, pointer.getAddress()) != LIBUSB_SUCCESS){
@@ -85,14 +124,37 @@ public class Usb{
         }
     }
 
+    /**
+     * Closes a USB device.
+     *
+     * @param deviceHandle The device handle
+     * */
     public void close(long deviceHandle){
         libusb_close(deviceHandle);
     }
 
+    /**
+     * Attempts to claim an interface.
+     *
+     * @param dev_handle The handle of the device
+     * @param iface The interface to claim
+     *
+     * @return true if successful, false if failed
+     * */
     public boolean claimInterface(long dev_handle, int iface){
         return libusb_claim_interface(dev_handle, iface) == LIBUSB_SUCCESS;
     }
 
+    /**
+     * Performs a bulk transfer.
+     *
+     * @param dev_handle The handle of the device
+     * @param endpoint The endpoint
+     * @param data The buffer to read from or write to
+     * @param timeout Transfer timeout
+     *
+     * @return The amount transferred or -1 on error
+     * */
     public int bulkTransfer(long dev_handle, byte endpoint, ByteBuffer data, int timeout){
         try(var transferred = Memory.allocatePointer()){
             int result = libusb_bulk_transfer(
@@ -106,10 +168,16 @@ public class Usb{
         }
     }
 
+    /**
+     * Reduces the reference count on a device.
+     *
+     * @param device The device
+     * */
     public void unrefDevice(long device){
         libusb_unref_device(device);
     }
 
+    // Setup some static stuff for the callbacks
     private static final long CALLBACK_POINTER = LibUsb.getHotplugCallback();
     private static final Method CALLBACK_METHOD;
     static{
@@ -122,6 +190,21 @@ public class Usb{
         CALLBACK_METHOD = method;
     }
 
+    /**
+     * Registers a hotplug handler.
+     *
+     * It is automatically freed when the handle is GC'ed
+     *
+     * @param events The events to listen for
+     * @param flags The callback flags
+     * @param deviceVid The VID to look for
+     * @param devicePid The PID to look for
+     * @param deviceClass The class of the device to look for
+     * @param callback The callback
+     * @param userData A user object
+     *
+     * @return A handle to the hotplug handler
+     * */
     public UsbHotplugHandler registerHotplugHandler(
         int events, int flags,
         int deviceVid, int devicePid, int deviceClass,
@@ -145,10 +228,18 @@ public class Usb{
         }
     }
 
+    /**
+     * Checks if libusb supports hotplugging.
+     *
+     * @return Is hotplug supported?
+     * */
     public boolean isHotplugSupported(){
         return LibUsb.libusb_has_capability(LibUsb.LIBUSB_CAP_HAS_HOTPLUG) != 0;
     }
 
+    /**
+     * Handle the libusb callbacks, needs to be called often.
+     * */
     public void handleCallbacks(){
         LibUsb.libusb_handle_events_completed(context, NULL);
     }

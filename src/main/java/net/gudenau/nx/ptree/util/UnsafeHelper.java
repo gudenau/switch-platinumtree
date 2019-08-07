@@ -4,9 +4,10 @@ import sun.misc.Unsafe;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.nio.Buffer;
-import java.nio.ByteBuffer;
 
+/**
+ * An Unsafe proxy, be careful!
+ * */
 class UnsafeHelper{
     private static final Unsafe UNSAFE = getUnsafe();
 
