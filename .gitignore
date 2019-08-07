@@ -1,0 +1,5 @@
+.gradle/*
+.idea/*
+.vscode/*
+build/*
+src/main/cpp/build
