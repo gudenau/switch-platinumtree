@@ -3,10 +3,6 @@ package net.gudenau.nx.ptree.usb;
 import java.lang.reflect.Method;
 
 class LibUsb{
-    static {
-        System.load("/home/gudenau/java/PlatinumTree/src/main/cpp/ptree.so");
-    }
-
     public static final int LIBUSB_CAP_HAS_HOTPLUG = 0x0001;
 
     public static final int LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED = 0x01;

@@ -2,6 +2,7 @@ package net.gudenau.nx.ptree;
 
 import net.gudenau.nx.ptree.usb.Usb;
 import net.gudenau.nx.ptree.usb.UsbHotplugHandler;
+import net.gudenau.nx.ptree.util.Platform;
 
 public class PlatinumTree{
     private static final short SWITCH_VID = (short)0x057E;
@@ -12,6 +13,7 @@ public class PlatinumTree{
 
     public static void main(String[] arguments){
         Runtime.getRuntime().addShutdownHook(new Thread(PlatinumTree::shutdown));
+        Platform.init();
 
         new PlatinumTree().run();
     }
