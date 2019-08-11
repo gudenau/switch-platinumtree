@@ -157,8 +157,12 @@ public class Usb{
      * */
     public int bulkTransfer(long dev_handle, byte endpoint, ByteBuffer data, int timeout){
         try(var transferred = Memory.allocatePointer()){
+            int offset = data.position();
+
             int result = libusb_bulk_transfer(
-                dev_handle, endpoint, Memory.getBufferAddress(data), data.limit(), transferred.getAddress(), timeout
+                dev_handle, endpoint,
+                Memory.getBufferAddress(data) + offset,
+                data.limit() - offset, transferred.getAddress(), timeout
             );
             if(result == LIBUSB_SUCCESS){
                 return transferred.getInt();

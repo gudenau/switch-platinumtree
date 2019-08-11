@@ -23,6 +23,7 @@ import static net.gudenau.nx.ptree.util.Memory.NULL;
  * */
 class Client implements Runnable, AutoCloseable{
     private static final int COMMAND_BUFFER_SIZE = 0x1000;
+    private static final int LIBUSB_BUG_SIZE = 0x00004000;
     private static final int COMMAND_MAX_ID = Command.values().length - 1;
 
     private static final byte PIPE_READ = (byte)(0x80 | 0x01);
@@ -147,9 +148,9 @@ class Client implements Runnable, AutoCloseable{
 
                 inputBuffer.position(0);
                 outputBuffer.position(0);
-                usb.bulkTransfer(handle, PIPE_WRITE, outputBuffer, 0);
+                transfer(PIPE_WRITE, outputBuffer);
                 for(var buffer : extraBuffers){
-                    usb.bulkTransfer(handle, PIPE_WRITE, buffer, 0);
+                    transfer(PIPE_WRITE, buffer);
                     Memory.freeBuffer(buffer);
                 }
                 extraBuffers.clear();
@@ -158,6 +159,33 @@ class Client implements Runnable, AutoCloseable{
             close();
             Memory.freeBuffer(inputBuffer);
             Memory.freeBuffer(outputBuffer);
+        }
+    }
+
+    private void transfer(byte endpoint, ByteBuffer buffer){
+        int transferSize = buffer.limit() - buffer.position();
+
+        if(transferSize > LIBUSB_BUG_SIZE){
+            int oldLimit = buffer.limit();
+            int oldPosition = buffer.position();
+
+            int position = oldPosition;
+
+            while(transferSize > LIBUSB_BUG_SIZE){
+                buffer.limit(position + LIBUSB_BUG_SIZE);
+                buffer.position(position);
+                usb.bulkTransfer(handle, endpoint, buffer, 0);
+                transferSize -= LIBUSB_BUG_SIZE;
+                position += LIBUSB_BUG_SIZE;
+            }
+            if(transferSize > 0){
+                buffer.position(position);
+                buffer.limit(oldLimit);
+                usb.bulkTransfer(handle, endpoint, buffer, 0);
+            }
+            buffer.position(oldPosition).limit(oldLimit);
+        }else{
+            usb.bulkTransfer(handle, endpoint, buffer, 0);
         }
     }
 
@@ -170,12 +198,7 @@ class Client implements Runnable, AutoCloseable{
         writePreamble(buffer, RESULT_SUCCESS);
     }
 
-    private void writeString(ByteBuffer buffer, String format, Object... params){
-        writeString(buffer, String.format(format, params));
-    }
-
     private void writeString(ByteBuffer buffer, String value){
-        System.out.println(value);
         var bytes = value.getBytes(StandardCharsets.UTF_8);
         buffer.putInt(bytes.length);
         buffer.put(bytes);
@@ -185,7 +208,6 @@ class Client implements Runnable, AutoCloseable{
         int size = buffer.getInt();
         var data = new byte[size];
         buffer.get(data);
-        System.out.println(new String(data, StandardCharsets.UTF_8));
         return new String(data, StandardCharsets.UTF_8);
     }
 
@@ -346,32 +368,22 @@ class Client implements Runnable, AutoCloseable{
                     lastReadFile = new RandomAccessFile(file, "r");
                 }
 
-                if(offset > lastReadFile.length()){
-                    writePreamble(outputBuffer, RESULT_INVALID_INPUT);
-                    return;
-                }
                 lastReadFile.seek(offset);
-                System.out.println(size);
-                // 2GiB limit
-                if(size > Integer.MAX_VALUE){
-                    size = Integer.MAX_VALUE;
-                }
                 ByteBuffer buffer = Memory.allocateBuffer((int)size);
-                long remaining = size;
-                byte[] data = new byte[1024*1024];
-                while(remaining > 1024*1024){
-                    lastReadFile.readFully(data);
-                    buffer.put(data);
-                    remaining -= 1024*1024;
-                }
-                if(remaining > 0){
-                    lastReadFile.readFully(data, 0, (int)remaining);
-                    buffer.put(data, 0, (int)remaining);
+                int position = 0;
+                while(position < size){
+                    buffer.position(position);
+                    int read = FileHelper.read(lastReadFile, buffer);
+                    if(read <= 0){
+                        break;
+                    }
+                    position += read;
                 }
 
-                buffer.limit((int)size);
+                buffer.limit(position);
+                buffer.position(0);
                 writePreamble(outputBuffer);
-                outputBuffer.putLong(size);
+                outputBuffer.putLong(position);
                 extraBuffers.add(buffer);
             }else{
                 writePreamble(outputBuffer, RESULT_INVALID_INPUT);

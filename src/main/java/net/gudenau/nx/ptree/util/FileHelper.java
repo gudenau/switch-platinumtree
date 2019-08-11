@@ -24,7 +24,12 @@ public class FileHelper{
         var fileDescriptor = file.getFD();
         int fd = UnsafeHelper.getInt(fileDescriptor, FileDescriptor_fd);
         long handle = UnsafeHelper.getLong(fileDescriptor, FileDescriptor_handle);
-        return read(fd, handle, Memory.getBufferAddress(buffer), buffer.limit());
+        return read(
+            fd,
+            handle,
+            Memory.getBufferAddress(buffer) + buffer.position(),
+            buffer.limit()
+        );
     }
 
     private static native int read(int fd, long handle, long bufferAddress, int limit);

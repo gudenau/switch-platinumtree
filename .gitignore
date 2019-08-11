@@ -4,3 +4,4 @@
 build/*
 src/main/cpp/build
 *.so
+hs_err_pid*.log
