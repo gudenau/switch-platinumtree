@@ -39,6 +39,8 @@ class Client implements Runnable, AutoCloseable{
     private static final int RESULT_MODULE = 356;
     private static final int RESULT_INVALID_INPUT = ((RESULT_MODULE) & 0x1FF) | ((1 + 100) & 0x1FFF) << 9;
 
+    private final PlatinumTree platinumTree;
+
     private final Usb usb;
     private final long device;
     private long handle;
@@ -46,17 +48,18 @@ class Client implements Runnable, AutoCloseable{
     private final State state;
     private final Cleaner.Cleanable cleaner;
 
-    //TODO
-    private final boolean readOnly = false;
+    private boolean readOnly = false;
 
     private final List<Favorite> favorites = new ArrayList<>();
 
     private FileSystem filesystem = FileSystems.getDefault();;
     private List<Path> roots;
 
-    Client(Usb usb, long device){
+    Client(PlatinumTree platinumTree, Usb usb, long device, boolean readOnly){
+        this.platinumTree = platinumTree;
         this.usb = usb;
         this.device = device;
+        this.readOnly = readOnly;
         state = new State(usb, device);
         cleaner = Memory.registerCleaner(this, state);
 
@@ -171,6 +174,7 @@ class Client implements Runnable, AutoCloseable{
             close();
             Memory.freeBuffer(inputBuffer);
             Memory.freeBuffer(outputBuffer);
+            platinumTree.deregisterClient(this);
         }
     }
 
@@ -613,6 +617,14 @@ class Client implements Runnable, AutoCloseable{
     @Override
     public void close(){
         cleaner.clean();
+    }
+
+    long getDevice(){
+        return device;
+    }
+
+    void setReadOnly(boolean readOnly){
+        this.readOnly = readOnly;
     }
 
     private static final class State implements Runnable{
