@@ -14,3 +14,12 @@ JNIEXPORT jint JNICALL Java_net_gudenau_nx_ptree_util_FileHelper_read
 
     return (jint)read((int)fd, (void*)buffer, (size_t)size);
 }
+
+JNIEXPORT jint JNICALL Java_net_gudenau_nx_ptree_util_FileHelper_write
+(JNIEnv* env, jclass klass, jint fd, jlong handle, jlong buffer, jint size){
+    UNUSED(env);
+    UNUSED(klass);
+    UNUSED(handle);
+
+    return (jint)write((int)fd, (void*)buffer, (size_t)size);
+}

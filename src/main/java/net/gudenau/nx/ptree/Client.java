@@ -3,7 +3,9 @@ package net.gudenau.nx.ptree;
 import net.gudenau.nx.ptree.usb.Usb;
 import net.gudenau.nx.ptree.util.FileHelper;
 import net.gudenau.nx.ptree.util.Memory;
+import net.gudenau.nx.ptree.util.Platform;
 
+import javax.swing.JFileChooser;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -15,6 +17,7 @@ import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static net.gudenau.nx.ptree.util.Memory.NULL;
 
@@ -43,6 +46,11 @@ class Client implements Runnable, AutoCloseable{
     private final State state;
     private final Cleaner.Cleanable cleaner;
 
+    //TODO
+    private final boolean readOnly = false;
+
+    private final List<Favorite> favorites = new ArrayList<>();
+
     private FileSystem filesystem = FileSystems.getDefault();;
     private List<Path> roots;
 
@@ -51,6 +59,10 @@ class Client implements Runnable, AutoCloseable{
         this.device = device;
         state = new State(usb, device);
         cleaner = Memory.registerCleaner(this, state);
+
+        favorites.add(new Favorite("Home", "Root", System.getProperty("user.home")));
+        favorites.add(new Favorite("Downloads", "Root", System.getProperty("user.home") + "/Downloads"));
+        favorites.add(new Favorite("Temp", "Root", System.getProperty("java.io.tmpdir")));
     }
 
     @Override
@@ -69,7 +81,7 @@ class Client implements Runnable, AutoCloseable{
             while(true){
                 Memory.memset(inputBuffer, (byte)0);
                 Memory.memset(outputBuffer, (byte)0);
-                int transferred = usb.bulkTransfer(handle, PIPE_READ, inputBuffer, 0);
+                int transferred = transfer(PIPE_READ, inputBuffer);
                 if(transferred < 0){
                     System.err.println("Error reading from Switch");
                     break;
@@ -89,11 +101,11 @@ class Client implements Runnable, AutoCloseable{
                 }
                 int commandId = inputBuffer.getInt();
                 if(commandId < 0 || commandId > COMMAND_MAX_ID){
-                    System.err.println("Unknown command: " + commandId);
+                    //System.err.println("Unknown command: " + commandId);
                     continue;
                 }
                 Command command = Command.values()[commandId];
-                System.out.println("Handling " + command.name());
+                //System.out.println("Handling " + command.name());
 
                 switch(command){
                     case GetDriveCount:
@@ -139,7 +151,7 @@ class Client implements Runnable, AutoCloseable{
                         handleGetSpecialPath(inputBuffer, outputBuffer);
                         break;
                     case SelectFile:
-                        handleSelectFile(inputBuffer, outputBuffer);
+                        handleSelectFile(outputBuffer);
                         break;
                     case Max:
                         handleMax(inputBuffer, outputBuffer);
@@ -162,7 +174,7 @@ class Client implements Runnable, AutoCloseable{
         }
     }
 
-    private void transfer(byte endpoint, ByteBuffer buffer){
+    private int transfer(byte endpoint, ByteBuffer buffer){
         int transferSize = buffer.limit() - buffer.position();
 
         if(transferSize > LIBUSB_BUG_SIZE){
@@ -174,18 +186,23 @@ class Client implements Runnable, AutoCloseable{
             while(transferSize > LIBUSB_BUG_SIZE){
                 buffer.limit(position + LIBUSB_BUG_SIZE);
                 buffer.position(position);
-                usb.bulkTransfer(handle, endpoint, buffer, 0);
+                if(usb.bulkTransfer(handle, endpoint, buffer, 0) <= 0){
+                    return -1;
+                }
                 transferSize -= LIBUSB_BUG_SIZE;
                 position += LIBUSB_BUG_SIZE;
             }
             if(transferSize > 0){
                 buffer.position(position);
                 buffer.limit(oldLimit);
-                usb.bulkTransfer(handle, endpoint, buffer, 0);
+                if(usb.bulkTransfer(handle, endpoint, buffer, 0) <= 0){
+                    return -1;
+                }
             }
             buffer.position(oldPosition).limit(oldLimit);
+            return transferSize;
         }else{
-            usb.bulkTransfer(handle, endpoint, buffer, 0);
+            return usb.bulkTransfer(handle, endpoint, buffer, 0) <= 0 ? -1 : transferSize;
         }
     }
 
@@ -209,6 +226,37 @@ class Client implements Runnable, AutoCloseable{
         var data = new byte[size];
         buffer.get(data);
         return new String(data, StandardCharsets.UTF_8);
+    }
+
+    private String readPath(ByteBuffer buffer){
+        var path = readString(buffer);
+
+        int separator = path.indexOf(":");
+        var drive = path.substring(0, separator);
+        var file = path.substring(separator + 1);
+
+        System.out.printf("    path: %s:%s\n", drive, file);
+
+        final String finalDrive = drive;
+        Optional<Favorite> favorite = favorites.stream()
+            .filter((fav)->fav.getName().equals(finalDrive))
+            .findFirst();
+        if(favorite.isPresent()){
+            var favoriteValue = favorite.get();
+            file = favoriteValue.getPath() + "/" + file;
+            drive = favoriteValue.getDrive();
+        }
+
+        System.out.printf("new path: %s:%s\n", drive, file);
+        String newPath = Platform.convertPath(drive, file);
+        System.out.printf(" convert: %s\n", newPath);
+        return newPath;
+    }
+
+    private ByteBuffer readBuffer(int size){
+        var buffer = Memory.allocateBuffer(size);
+        transfer(PIPE_READ, buffer);
+        return buffer;
     }
 
     private void handleGetDriveCount(ByteBuffer outputBuffer){
@@ -239,26 +287,8 @@ class Client implements Runnable, AutoCloseable{
         }
     }
 
-    private String fixPath(String path){
-        path = path.replaceAll("\\\\", "/");
-        int index = path.indexOf(":");
-        if(index > -1){
-            String key = path.substring(0, index);
-            path = path.substring(index + 1);
-            if("Home".equals(key)){
-                path = System.getProperty("user.home") + path;
-            }else if("Downloads".equals(key)){
-                path = System.getProperty("user.home") + "/Downloads" + path;
-            }
-            return path;
-        }else{
-            return path;
-        }
-    }
-
     private void handleStatPath(ByteBuffer inputBuffer, ByteBuffer outputBuffer){
-        var path = fixPath(readString(inputBuffer));
-        var file = new File(path);
+        var file = new File(readPath(inputBuffer));
         if(file.exists()){
             int type;
             long fileSize;
@@ -280,7 +310,7 @@ class Client implements Runnable, AutoCloseable{
     private String lastFilePath = null;
     private File[] lastFileResult = null;
     private void handleGetFileCount(ByteBuffer inputBuffer, ByteBuffer outputBuffer){
-        var path = fixPath(readString(inputBuffer));
+        var path = readPath(inputBuffer);
         var file = new File(path);
         if(file.exists() && file.isDirectory()){
             if(!path.equals(lastFilePath)){
@@ -295,7 +325,7 @@ class Client implements Runnable, AutoCloseable{
     }
 
     private void handleGetFile(ByteBuffer inputBuffer, ByteBuffer outputBuffer){
-        var path = fixPath(readString(inputBuffer));
+        var path = readPath(inputBuffer);
         var file = new File(path);
         if(file.exists() && file.isDirectory()){
             if(!path.equals(lastFilePath)){
@@ -317,7 +347,7 @@ class Client implements Runnable, AutoCloseable{
     private String lastDirectoryPath = null;
     private File[] lastDirectoryResult = null;
     private void handleGetDirectoryCount(ByteBuffer inputBuffer, ByteBuffer outputBuffer){
-        var path = fixPath(readString(inputBuffer));
+        var path = readPath(inputBuffer);
         var file = new File(path);
         if(file.exists() && file.isDirectory()){
             if(!path.equals(lastDirectoryPath)){
@@ -332,7 +362,7 @@ class Client implements Runnable, AutoCloseable{
     }
 
     private void handleGetDirectory(ByteBuffer inputBuffer, ByteBuffer outputBuffer){
-        var path = fixPath(readString(inputBuffer));
+        var path = readPath(inputBuffer);
         var file = new File(path);
         if(file.exists() && file.isDirectory()){
             if(!path.equals(lastDirectoryPath)){
@@ -355,7 +385,7 @@ class Client implements Runnable, AutoCloseable{
     private RandomAccessFile lastReadFile;
     private void handleReadFile(ByteBuffer inputBuffer, ByteBuffer outputBuffer, List<ByteBuffer> extraBuffers){
         try{
-            var path = fixPath(readString(inputBuffer));
+            var path = readPath(inputBuffer);
             var file = new File(path);
             long offset = inputBuffer.getLong();
             long size = inputBuffer.getLong();
@@ -394,54 +424,187 @@ class Client implements Runnable, AutoCloseable{
         }
     }
 
+    private String lastWritePath;
+    private RandomAccessFile lastWriteFile;
     private void handleWriteFile(ByteBuffer inputBuffer, ByteBuffer outputBuffer){
-        writePreamble(outputBuffer, RESULT_INVALID_INPUT);
-        System.err.println("UNIMPLEMENTED");
+        if(readOnly){
+            writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+            return;
+        }
+        try{
+            var path = readPath(inputBuffer);
+            var size = inputBuffer.getLong();
+            var file = new File(path);
+            var buffer = readBuffer((int)size);
+            System.out.println("Writing " + path);
+            try{
+                if(!path.equals(lastWritePath)){
+                    lastWritePath = path;
+                    var parent = file.getParentFile();
+                    if(parent != null && !parent.exists()){
+                        if(!parent.mkdirs()){
+                            writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+                            return;
+                        }
+                    }
+                    if(!file.exists()){
+                        if(!file.createNewFile()){
+                            writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+                            return;
+                        }
+                    }
+                    if(lastWriteFile != null){
+                        lastWriteFile.close();
+                    }
+                    lastWriteFile = new RandomAccessFile(file, "rw");
+                }
+
+                while(buffer.hasRemaining()){
+                    int transferred = FileHelper.write(lastWriteFile, buffer);
+                    if(transferred < 0){
+                        writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+                        return;
+                    }
+                    buffer.position(buffer.position() + transferred);
+                }
+            }finally{
+                Memory.freeBuffer(buffer);
+            }
+        }catch(IOException e){
+            e.printStackTrace();
+            writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+        }
     }
 
     private void handleCreate(ByteBuffer inputBuffer, ByteBuffer outputBuffer){
-        writePreamble(outputBuffer, RESULT_INVALID_INPUT);
-        System.err.println("UNIMPLEMENTED");
+        if(readOnly){
+            writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+            return;
+        }
+        try{
+            var type = inputBuffer.getInt();
+            var path = readPath(inputBuffer);
+            var file = new File(path);
+            if(type == 1){
+                var parent = file.getParentFile();
+                if(parent != null && !parent.exists()){
+                    if(!parent.mkdirs()){
+                        writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+                        return;
+                    }
+                }
+                if(file.exists()){
+                    if(!file.delete()){
+                        writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+                        return;
+                    }
+                }
+                if(file.createNewFile()){
+                    writePreamble(outputBuffer);
+                }else{
+                    writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+                }
+            }else if(type == 2){
+                if(!file.exists()){
+                    if(file.mkdirs()){
+                        writePreamble(outputBuffer);
+                    }else{
+                        writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+                    }
+                }
+            }else{
+                writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+            }
+        }catch(IOException e){
+            e.printStackTrace();
+            writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+        }
     }
 
     private void handleDelete(ByteBuffer inputBuffer, ByteBuffer outputBuffer){
-        writePreamble(outputBuffer, RESULT_INVALID_INPUT);
-        System.err.println("UNIMPLEMENTED");
-    }
-
-    private void handleRename(ByteBuffer inputBuffer, ByteBuffer outputBuffer){
-        writePreamble(outputBuffer, RESULT_INVALID_INPUT);
-        System.err.println("UNIMPLEMENTED");
-    }
-
-    //TODO
-    private void handleGetSpecialPatchCount(ByteBuffer outputBuffer){
-        writePreamble(outputBuffer);
-        outputBuffer.putInt(2);
-    }
-
-    //TODO
-    private void handleGetSpecialPath(ByteBuffer inputBuffer, ByteBuffer outputBuffer){
-        int index = inputBuffer.getInt();
-        if(index < 0 || index >= 2){
+        if(readOnly){
+            writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+            return;
+        }
+        var type = inputBuffer.getInt();
+        var path = readPath(inputBuffer);
+        var file = new File(path);
+        if(type != 1 && type != 2){
             writePreamble(outputBuffer, RESULT_INVALID_INPUT);
         }else{
-            writePreamble(outputBuffer);
-            if(index == 0){
-                writeString(outputBuffer, "Home");
-                writeString(outputBuffer, "Home");
+            if(delete(file)){
+                writePreamble(outputBuffer);
             }else{
-                writeString(outputBuffer, "Downloads");
-                writeString(outputBuffer, "Downloads");
+                writePreamble(outputBuffer, RESULT_INVALID_INPUT);
             }
         }
     }
 
-    private void handleSelectFile(ByteBuffer inputBuffer, ByteBuffer outputBuffer){
-        writePreamble(outputBuffer, RESULT_INVALID_INPUT);
-        System.err.println("UNIMPLEMENTED");
+    private boolean delete(File file){
+        if(file.isDirectory()){
+            var files = file.listFiles();
+            if(files != null){
+                for(var child : files){
+                    if(!delete(child)){
+                        return false;
+                    }
+                }
+            }
+        }
+        return file.delete();
     }
 
+    private void handleRename(ByteBuffer inputBuffer, ByteBuffer outputBuffer){
+        if(readOnly){
+            writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+            return;
+        }
+        var type = inputBuffer.getInt();
+        var oldPath = readPath(inputBuffer);
+        var newPath = readPath(inputBuffer);
+        var oldFile = new File(oldPath);
+        var newFile = new File(newPath);
+        if(type != 1 && type != 2){
+            writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+        }else{
+            if(oldFile.renameTo(newFile)){
+                writePreamble(outputBuffer);
+            }else{
+                writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+            }
+        }
+    }
+
+    private void handleGetSpecialPatchCount(ByteBuffer outputBuffer){
+        writePreamble(outputBuffer);
+        outputBuffer.putInt(favorites.size());
+    }
+
+    private void handleGetSpecialPath(ByteBuffer inputBuffer, ByteBuffer outputBuffer){
+        int index = inputBuffer.getInt();
+        if(index < 0 || index >= favorites.size()){
+            writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+        }else{
+            writePreamble(outputBuffer);
+            var favorite = favorites.get(index);
+            var name = favorite.getName();
+            writeString(outputBuffer, name);
+            writeString(outputBuffer, name);
+        }
+    }
+
+    private void handleSelectFile(ByteBuffer outputBuffer){
+        var chooser = new JFileChooser();
+        chooser.setMultiSelectionEnabled(false);
+        if(chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION){
+            writePreamble(outputBuffer);
+            writeString(outputBuffer, chooser.getSelectedFile().getAbsolutePath());
+        }else{
+            writePreamble(outputBuffer, RESULT_INVALID_INPUT);
+        }
+    }
+
+    // What is this even for?
     private void handleMax(ByteBuffer inputBuffer, ByteBuffer outputBuffer){
         writePreamble(outputBuffer, RESULT_INVALID_INPUT);
         System.err.println("UNIMPLEMENTED");

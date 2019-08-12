@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.channels.Channels;
 import java.nio.file.Files;
+import java.nio.file.Path;
 
 /**
  * Platform specific stuff.
@@ -95,19 +96,58 @@ public class Platform{
         return arch;
     }
 
+    private static PathConverter pathConverter;
+    public static String convertPath(String drive, String file){
+        if(pathConverter == null){
+            pathConverter = getOS().createPathConverter();
+        }
+        return pathConverter.convertPath(drive, file);
+    }
+
     public enum OS{
-        LINUX("so"),
-        UNKNOWN("");
+        LINUX("so", LinuxPathConverter.class),
+        UNKNOWN("", NopPathConverter.class);
 
         private final String extension;
+        private final Class<? extends PathConverter> converter;
 
-        OS(String extension){
+        OS(String extension, Class<? extends PathConverter> converter){
             this.extension = extension;
+            this.converter = converter;
+        }
+
+        public PathConverter createPathConverter(){
+            try{
+                var constructor = converter.getDeclaredConstructor();
+                constructor.setAccessible(true);
+                return constructor.newInstance();
+            }catch(ReflectiveOperationException e){
+                throw new RuntimeException(e);
+            }
         }
     }
 
     public enum Arch{
         AMD64,
         UNKNOWN
+    }
+
+    @FunctionalInterface
+    private interface PathConverter{
+        String convertPath(String drive, String path);
+    }
+
+    private static class NopPathConverter implements PathConverter{
+        @Override
+        public String convertPath(String drive, String path){
+            return drive + ":" + path;
+        }
+    }
+
+    private static class LinuxPathConverter implements PathConverter{
+        @Override
+        public String convertPath(String drive, String path){
+            return path.replaceAll("\\/{2,}", "/");
+        }
     }
 }

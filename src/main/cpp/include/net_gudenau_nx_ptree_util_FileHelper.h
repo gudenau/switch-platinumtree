@@ -15,6 +15,14 @@ extern "C" {
 JNIEXPORT jint JNICALL Java_net_gudenau_nx_ptree_util_FileHelper_read
   (JNIEnv *, jclass, jint, jlong, jlong, jint);
 
+/*
+ * Class:     net_gudenau_nx_ptree_util_FileHelper
+ * Method:    write
+ * Signature: (IJJI)I
+ */
+JNIEXPORT jint JNICALL Java_net_gudenau_nx_ptree_util_FileHelper_write
+  (JNIEnv *, jclass, jint, jlong, jlong, jint);
+
 #ifdef __cplusplus
 }
 #endif
