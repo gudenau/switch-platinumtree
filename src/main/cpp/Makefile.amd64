@@ -1,0 +1,5 @@
+TARGET		:=	../resources/net/gudenau/nx/ptree/res/natives/linux/amd64.so
+DIR_BLD		:=	build/amd64
+FLAGS_ARCH	:=	-m64
+
+include Makefile.common

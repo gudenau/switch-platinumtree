@@ -1,0 +1,5 @@
+TARGET		:=	../resources/net/gudenau/nx/ptree/res/natives/linux/x86.so
+DIR_BLD		:=	build/x86
+FLAGS_ARCH	:=	-m32
+
+include Makefile.common

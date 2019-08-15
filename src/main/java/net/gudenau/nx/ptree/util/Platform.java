@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.channels.Channels;
 import java.nio.file.Files;
-import java.nio.file.Path;
 
 /**
  * Platform specific stuff.
@@ -129,6 +128,7 @@ public class Platform{
 
     public enum Arch{
         AMD64,
+        X86,
         UNKNOWN
     }
 
