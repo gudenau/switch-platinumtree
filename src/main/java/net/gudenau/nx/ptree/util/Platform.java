@@ -68,6 +68,8 @@ public class Platform{
             String name = System.getProperty("os.name").toLowerCase();
             if(name.contains("linux")){
                 os = OS.LINUX;
+            }else if(name.contains("window")){
+                os = OS.WINDOWS;
             }else{
                 System.err.println("Unknown OS: " + System.getProperty("os.name"));
                 os = OS.UNKNOWN;
@@ -87,6 +89,8 @@ public class Platform{
             String name = System.getProperty("os.arch").toLowerCase();
             if(name.contains("amd64")){
                 arch = Arch.AMD64;
+            }else if(name.contains("x86")){
+                arch = Arch.X86;
             }else{
                 System.err.println("Unknown arch: " + System.getProperty("os.arch"));
                 arch = Arch.UNKNOWN;
@@ -105,6 +109,7 @@ public class Platform{
 
     public enum OS{
         LINUX("so", LinuxPathConverter.class),
+        WINDOWS("dll", WindowsPathConverter.class),
         UNKNOWN("", NopPathConverter.class);
 
         private final String extension;
@@ -148,6 +153,13 @@ public class Platform{
         @Override
         public String convertPath(String drive, String path){
             return path.replaceAll("\\/{2,}", "/");
+        }
+    }
+
+    private static class WindowsPathConverter implements PathConverter{
+        @Override
+        public String convertPath(String drive, String path){
+            return drive + ":" + path.replaceAll("/+", "\\");
         }
     }
 }
