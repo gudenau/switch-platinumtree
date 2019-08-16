@@ -2,6 +2,7 @@
 .idea/*
 .vscode/*
 build/*
+out/*
 src/main/cpp/build
 src/main/cpp/platinumtree/Release
 src/main/cpp/platinumtree/x64
