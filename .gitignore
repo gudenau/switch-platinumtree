@@ -3,5 +3,8 @@
 .vscode/*
 build/*
 src/main/cpp/build
+src/main/cpp/platinumtree/Release
+src/main/cpp/platinumtree/x64
 *.so
+*.dll
 hs_err_pid*.log
