@@ -39,6 +39,7 @@ public class TrayManager{
         menu.add(createMenuItem("Enable writing", ()->platinumTree.setReadOnly(false)));
         menu.add(createMenuItem("Disable writing", ()->platinumTree.setReadOnly(true)));
         menu.add(createMenuItem("Scan for Switches", platinumTree::scan));
+        menu.add(createMenuItem("Edit favorites", ()->new FavoriteEditor(platinumTree).show()));
         menu.addSeparator();
         menu.add(createMenuItem("Exit", ()->System.exit(0)));
 

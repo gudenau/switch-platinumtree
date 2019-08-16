@@ -108,16 +108,18 @@ public class Platform{
     }
 
     public enum OS{
-        LINUX("so", LinuxPathConverter.class),
-        WINDOWS("dll", WindowsPathConverter.class),
-        UNKNOWN("", NopPathConverter.class);
+        LINUX("so", LinuxPathConverter.class, new File(System.getProperty("user.home") + "/.config/platinumTree")),
+        WINDOWS("dll", WindowsPathConverter.class, new File(System.getenv("APPDATA") + "\\.platinumTree")),
+        UNKNOWN("", NopPathConverter.class, new File("."));
 
         private final String extension;
         private final Class<? extends PathConverter> converter;
+        private final File configDir;
 
-        OS(String extension, Class<? extends PathConverter> converter){
+        OS(String extension, Class<? extends PathConverter> converter, File configDir){
             this.extension = extension;
             this.converter = converter;
+            this.configDir = configDir;
         }
 
         public PathConverter createPathConverter(){
@@ -128,6 +130,10 @@ public class Platform{
             }catch(ReflectiveOperationException e){
                 throw new RuntimeException(e);
             }
+        }
+
+        public File getConfigDir(){
+            return configDir;
         }
     }
 

@@ -1,25 +1,31 @@
 package net.gudenau.nx.ptree;
 
-public class Favorite{
-    private final String name;
-    private final String drive;
-    private final String path;
+class Favorite{
+    private String name;
+    private String drive;
+    private String path;
 
-    public Favorite(String name, String drive, String path){
+    Favorite(String name, String drive, String path){
         this.name = name;
         this.drive = drive;
         this.path = path;
     }
 
-    public String getName(){
+    String getName(){
         return name;
     }
 
-    public String getDrive(){
+    String getDrive(){
         return drive;
     }
 
-    public String getPath(){
+    String getPath(){
         return path;
+    }
+
+    void set(String name, String drive, String path){
+        this.name = name;
+        this.drive = drive;
+        this.path = path;
     }
 }
